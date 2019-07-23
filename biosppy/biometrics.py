@@ -1,20 +1,25 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
-    biosppy.biometrics
-    ------------------
+biosppy.biometrics
+------------------
 
-    This module provides classifier interfaces for identity recognition
-    (biometrics) applications. The core API methods are:
-    * enroll: add a new subject;
-    * dismiss: remove an existing subject;
-    * identify: determine the identity of collected biometric dataset;
-    * authenticate: verify the identity of collected biometric dataset.
+This module provides classifier interfaces for identity recognition
+(biometrics) applications. The core API methods are:
+* enroll: add a new subject;
+* dismiss: remove an existing subject;
+* identify: determine the identity of collected biometric dataset;
+* authenticate: verify the identity of collected biometric dataset.
 
-    :copyright: (c) 2015 by Instituto de Telecomunicacoes
-    :license: BSD 3-clause, see LICENSE for more details.
+:copyright: (c) 2015-2018 by Instituto de Telecomunicacoes
+:license: BSD 3-clause, see LICENSE for more details.
 """
 
 # Imports
+# compat
+from __future__ import absolute_import, division, print_function
+from six.moves import range
+import six
+
 # built-in
 import collections
 
@@ -22,7 +27,7 @@ import collections
 import numpy as np
 import shortuuid
 from bidict import bidict
-from sklearn import cross_validation as skcv
+from sklearn import model_selection as skcv
 from sklearn import svm as sksvm
 
 # local
@@ -247,7 +252,7 @@ class BaseClassifier(object):
 
         """
 
-        subjects = list(self._subject2label.keys())
+        subjects = list(self._subject2label)
 
         return subjects
 
@@ -314,6 +319,11 @@ class BaseClassifier(object):
         deferred : bool, optional
             If True, computations are delayed until `flush` is called.
 
+        Raises
+        ------
+        SubjectError
+            If the subject to remove is not enrolled.
+
         Notes
         -----
         * When using deferred calls, a dismiss overrides a previous enroll
@@ -356,7 +366,7 @@ class BaseClassifier(object):
         if data is None:
             raise TypeError("Please specify the data to train.")
 
-        for sub, val in data.items():
+        for sub, val in six.iteritems(data):
             if val is None:
                 try:
                     self.dismiss(sub, deferred=True)
@@ -399,7 +409,7 @@ class BaseClassifier(object):
 
         # gather data to test
         data = {}
-        for subject, label in self._subject2label.items():
+        for subject, label in six.iteritems(self._subject2label):
             # select a random fraction of the training data
             aux = self.io_load(label)
             indx = list(range(len(aux)))
@@ -411,7 +421,7 @@ class BaseClassifier(object):
         _, res = self.evaluate(data, ths)
 
         # choose thresholds at EER
-        for subject, label in self._subject2label.items():
+        for subject, label in six.iteritems(self._subject2label):
             EER_auth = res['subject'][subject]['authentication']['rates']['EER']
             self.set_auth_thr(label, EER_auth[self.EER_IDX, 0], ready=True)
 
@@ -529,7 +539,7 @@ class BaseClassifier(object):
 
         """
 
-        if force or (self._autoThresholds is not None):
+        if force or (self._autoThresholds is None):
             self._autoThresholds = self._get_thresholds()
 
         return self._autoThresholds
@@ -639,7 +649,7 @@ class BaseClassifier(object):
             thresholds = self.get_thresholds()
 
         # get subjects
-        subjects = [item for item in list(data.keys()) if self.check_subject(item)]
+        subjects = [item for item in data if self.check_subject(item)]
         if len(subjects) == 0:
             raise ValueError("No enrolled subjects in test set.")
 
@@ -698,7 +708,7 @@ class BaseClassifier(object):
         labels : list, array
             A list of m class labels.
         cv : CV iterator
-            A `sklearn.cross_validation` iterator.
+            A `sklearn.model_selection` iterator.
         thresholds : array, optional
             Classifier thresholds to use.
         ``**kwargs`` : dict, optional
@@ -722,7 +732,7 @@ class BaseClassifier(object):
                 lbl = labels[item]
                 train_idx[lbl].append(item)
 
-            train_data = {sub: data[idx] for sub, idx in train_idx.items()}
+            train_data = {sub: data[idx] for sub, idx in six.iteritems(train_idx)}
 
             # test data set
             test_idx = collections.defaultdict(list)
@@ -730,7 +740,7 @@ class BaseClassifier(object):
                 lbl = labels[item]
                 test_idx[lbl].append(item)
 
-            test_data = {sub: data[idx] for sub, idx in test_idx.items()}
+            test_data = {sub: data[idx] for sub, idx in six.iteritems(test_idx)}
 
             # instantiate classifier
             clf = cls(**kwargs)
@@ -833,7 +843,7 @@ class BaseClassifier(object):
         # target class labels
         if targets is None:
             targets = list(self._subject2label.values())
-        elif isinstance(targets, str):
+        elif isinstance(targets, six.string_types):
             targets = [targets]
 
         return data
@@ -989,7 +999,7 @@ class KNN(BaseClassifier):
             count = np.sum(dists[i, :] <= threshold)
 
             # decide accept
-            if count > (self.k / 2):
+            if count > (self.k // 2):
                 decision[i] = True
 
         return decision
@@ -1015,7 +1025,7 @@ class KNN(BaseClassifier):
 
         maxD = []
         for _ in range(3):
-            for label in list(self._subject2label.values()):
+            for label in list(six.itervalues(self._subject2label)):
                 # randomly select samples
                 aux = self.io_load(label)
                 ind = np.random.randint(0, aux.shape[0], 3)
@@ -1071,7 +1081,7 @@ class KNN(BaseClassifier):
             count = np.sum(dists[i, :] <= thrFcn(lbl))
 
             # decide
-            if count > (self.k / 2):
+            if count > (self.k // 2):
                 # accept
                 labels.append(lbl)
             else:
@@ -1102,8 +1112,8 @@ class KNN(BaseClassifier):
 
         # target class labels
         if targets is None:
-            targets = list(self._subject2label.values())
-        elif isinstance(targets, str):
+            targets = list(six.itervalues(self._subject2label))
+        elif isinstance(targets, six.string_types):
             targets = [targets]
 
         dists = []
@@ -1293,12 +1303,11 @@ class SVM(BaseClassifier):
         X = np.concatenate((X1, X2), axis=0)
         Y = np.ones(n1 + n2)
 
-        if label1 < label2:
+        pair = self._convert_pair((label1, label2))
+        if pair[0] == label1:
             Y[:n1] = -1
-            pair = (label1, label2)
         else:
             Y[n1:] = -1
-            pair = (label2, label1)
 
         # class weights
         weights = self._get_weights(n1, n2)
@@ -1524,11 +1533,11 @@ class SVM(BaseClassifier):
 
         # target class labels
         if self._nbSubjects == 1:
-            pairs = list(self._models.keys())
+            pairs = list(self._models)
         else:
             if targets is None:
-                pairs = list(self._models.keys())
-            elif isinstance(targets, str):
+                pairs = list(self._models)
+            elif isinstance(targets, six.string_types):
                 labels = list(
                     set(self._subject2label.values()) - set([targets]))
                 pairs = [[targets, lbl] for lbl in labels]
@@ -1563,9 +1572,10 @@ class SVM(BaseClassifier):
             dismiss = []
 
         # process dismiss
-        pairs = list(self._models.keys())
+        src_pairs = list(self._models)
+        pairs = []
         for t in dismiss:
-            pairs = [p for p in pairs if t in p]
+            pairs.extend([p for p in src_pairs if t in p])
 
         for p in pairs:
             self._del_clf(p)
@@ -1590,11 +1600,11 @@ class SVM(BaseClassifier):
 
         # check singles
         if self._nbSubjects == 1:
-            label = list(self._subject2label.values())[0]
+            label = list(six.itervalues(self._subject2label))[0]
             X = self.io_load(label)
             self._get_single_clf(X, label)
         elif self._nbSubjects > 1:
-            aux = [p for p in list(self._models.keys()) if '' in p]
+            aux = [p for p in self._models if '' in p]
             if len(aux) != 0:
                 for p in aux:
                     self._del_clf(p)
@@ -1653,6 +1663,18 @@ def get_auth_rates(TP=None, FP=None, TN=None, FN=None, thresholds=None):
         True Reject Rate at each classifier threshold.
     EER : array
         Equal Error Rate points, with format (threshold, rate).
+    Err : array
+        Error rate at each classifier threshold.
+    PPV : array
+        Positive Predictive Value at each classifier threshold.
+    FDR : array
+        False Discovery Rate at each classifier threshold.
+    NPV : array
+        Negative Predictive Value at each classifier threshold.
+    FOR : array
+        False Omission Rate at each classifier threshold.
+    MCC : array
+        Matthrews Correlation Coefficient at each classifier threshold.
 
     """
 
@@ -1675,30 +1697,48 @@ def get_auth_rates(TP=None, FP=None, TN=None, FN=None, thresholds=None):
     FN = np.array(FN)
     thresholds = np.array(thresholds)
 
-    Acc = (TP + TN) / (TP + TN + FP + FN)
+    # helper variables
+    A = TP + FP
+    B = TP + FN
+    C = TN + FP
+    D = TN + FN
+    E = A * B * C * D
+    F = A + D
 
-    # should accept counts
-    SA = TP + FN
+    # avoid divisions by zero
+    A[A == 0] = 1.
+    B[B == 0] = 1.
+    C[C == 0] = 1.
+    D[D == 0] = 1.
+    E[E == 0] = 1.
+    F[F == 0] = 1.
 
-    # should reject counts
-    SR = TN + FP
+    # rates
+    Acc = (TP + TN) / F # accuracy
+    Err = (FP + FN) / F # error rate
 
-    # avoid division by zero
-    SA[SA <= 0] = 1.
-    SR[SR <= 0] = 1.
+    TAR = TP / B # true accept rate /true positive rate
+    FRR = FN / B # false rejection rate / false negative rate
 
-    TAR = TP / SA
-    FAR = FP / SR
-    FRR = FN / SA
-    TRR = TN / SR
+    TRR = TN / C # true rejection rate / true negative rate
+    FAR = FP / C # false accept rate / false positive rate
+
+    PPV = TP / A # positive predictive value
+    FDR = FP / A # false discovery rate
+
+    NPV = TN / D # negative predictive value
+    FOR = FN / D # false omission rate
+
+    MCC = (TP*TN - FP*FN) / np.sqrt(E) # matthews correlation coefficient 
 
     # determine EER
     roots, values = tools.find_intersection(thresholds, FAR, thresholds, FRR)
     EER = np.vstack((roots, values)).T
 
     # output
-    args = (Acc, TAR, FAR, FRR, TRR, EER)
-    names = ('Acc', 'TAR', 'FAR', 'FRR', 'TRR', 'EER')
+    args = (Acc, TAR, FAR, FRR, TRR, EER, Err, PPV, FDR, NPV, FOR, MCC)
+    names = ('Acc', 'TAR', 'FAR', 'FRR', 'TRR', 'EER', 'Err', 'PPV', 'FDR',
+             'NPV', 'FOR', 'MCC')
 
     return utils.ReturnTuple(args, names)
 
@@ -2013,7 +2053,7 @@ def assess_runs(results=None, subjects=None):
     Parameters
     ----------
     results : list
-        Classification results for each run.
+        Classification assessment for each run.
     subjects : list
         Common target subject classes.
 
@@ -2163,7 +2203,7 @@ def combination(results=None, weights=None):
         weights = {}
 
     # compile results to find all classes
-    vec = list(results.values())
+    vec = list(six.itervalues(results))
     if len(vec) == 0:
         raise CombinationError("No keys found.")
 
@@ -2182,7 +2222,7 @@ def combination(results=None, weights=None):
         # multi-class
         counts = np.zeros(nb, dtype='float')
 
-        for n in results.keys():
+        for n in results:
             # ensure array
             res = np.array(results[n])
             ns = float(len(res))
@@ -2263,7 +2303,7 @@ def cross_validation(labels,
                      random_state=None):
     """Return a Cross Validation (CV) iterator.
 
-    Wraps the StratifiedShuffleSplit iterator from sklearn.cross_validation.
+    Wraps the StratifiedShuffleSplit iterator from sklearn.model_selection.
     This iterator returns stratified randomized folds, which preserve the
     percentage of samples for each class.
 
@@ -2290,10 +2330,11 @@ def cross_validation(labels,
 
     """
 
-    cv = skcv.StratifiedShuffleSplit(labels,
-                                     n_iter=n_iter,
-                                     test_size=test_size,
-                                     train_size=train_size,
-                                     random_state=random_state)
+    cv = skcv.StratifiedShuffleSplit(
+        n_splits=n_iter,
+        test_size=test_size,
+        train_size=train_size,
+        random_state=random_state,
+    ).split(np.zeros(len(labels)), labels)
 
     return utils.ReturnTuple((cv,), ('cv',))

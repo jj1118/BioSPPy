@@ -1,15 +1,19 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
-    biosppy.signals.bvp
-    -------------------
+biosppy.signals.bvp
+-------------------
 
-    This module provides methods to process Blood Volume Pulse (BVP) signals.
+This module provides methods to process Blood Volume Pulse (BVP) signals.
 
-    :copyright: (c) 2015 by Instituto de Telecomunicacoes
-    :license: BSD 3-clause, see LICENSE for more details.
+:copyright: (c) 2015-2018 by Instituto de Telecomunicacoes
+:license: BSD 3-clause, see LICENSE for more details.
 """
 
 # Imports
+# compat
+from __future__ import absolute_import, division, print_function
+from six.moves import range
+
 # 3rd party
 import numpy as np
 
@@ -101,6 +105,7 @@ def find_onsets(signal=None, sampling_rate=1000., sm_size=None, size=None,
     """Determine onsets of BVP pulses.
 
     Skips corrupted signal parts.
+    Based on the approach by Zong *et al.* [Zong03]_.
 
     Parameters
     ----------
@@ -131,6 +136,12 @@ def find_onsets(signal=None, sampling_rate=1000., sm_size=None, size=None,
     -------
     onsets : array
         Indices of BVP pulse onsets.
+    
+    References
+    ----------
+    .. [Zong03] W Zong, T Heldt, GB Moody and RG Mark, "An Open-source
+       Algorithm to Detect Onset of Arterial Blood Pressure Pulses",
+       IEEE Comp. in Cardiology, vol. 30, pp. 259-262, 2003
 
     """
 

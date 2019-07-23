@@ -1,15 +1,20 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
-    biosppy.plotting
-    ----------------
+biosppy.plotting
+----------------
 
-    This module provides utilities to plot data.
+This module provides utilities to plot data.
 
-    :copyright: (c) 2015 by Instituto de Telecomunicacoes
-    :license: BSD 3-clause, see LICENSE for more details.
+:copyright: (c) 2015-2018 by Instituto de Telecomunicacoes
+:license: BSD 3-clause, see LICENSE for more details.
 """
 
 # Imports
+# compat
+from __future__ import absolute_import, division, print_function
+from six.moves import range, zip
+import six
+
 # built-in
 import os
 
@@ -28,7 +33,7 @@ MINOR_LW = 1.5
 MAX_ROWS = 10
 
 
-def _plot_filter(b, a, sampling_rate=1000., nfreqs=512, ax=None):
+def _plot_filter(b, a, sampling_rate=1000., nfreqs=4096, ax=None):
     """Compute and plot the frequency response of a digital filter.
 
     Parameters
@@ -64,14 +69,15 @@ def _plot_filter(b, a, sampling_rate=1000., nfreqs=512, ax=None):
         fig = ax.figure
 
     # amplitude
-    ax.semilogy(freqs, np.abs(resp), 'b', linewidth=MAJOR_LW)
+    pwr = 20. * np.log10(np.abs(resp))
+    ax.semilogx(freqs, pwr, 'b', linewidth=MAJOR_LW)
     ax.set_ylabel('Amplitude (dB)', color='b')
     ax.set_xlabel('Frequency (Hz)')
 
     # phase
     angles = np.unwrap(np.angle(resp))
     ax2 = ax.twinx()
-    ax2.plot(freqs, angles, 'g', linewidth=MAJOR_LW)
+    ax2.semilogx(freqs, angles, 'g', linewidth=MAJOR_LW)
     ax2.set_ylabel('Angle (radians)', color='g')
 
     ax.grid()
@@ -271,7 +277,7 @@ def plot_bvp(ts=None,
     ax3.plot(heart_rate_ts, heart_rate, linewidth=MAJOR_LW, label='Heart Rate')
 
     ax3.set_xlabel('Time (s)')
-    ax3.set_ylabel('Heart Rate (bmp)')
+    ax3.set_ylabel('Heart Rate (bpm)')
     ax3.legend()
     ax3.grid()
 
@@ -394,9 +400,11 @@ def plot_eda(ts=None,
 
 
 def plot_emg(ts=None,
+             sampling_rate=None,
              raw=None,
              filtered=None,
              onsets=None,
+             processed=None,
              path=None,
              show=False):
     """Create a summary plot from the output of signals.emg.emg.
@@ -405,12 +413,16 @@ def plot_emg(ts=None,
     ----------
     ts : array
         Signal time axis reference (seconds).
+    sampling_rate : int, float
+        Sampling frequency (Hz).
     raw : array
         Raw EMG signal.
     filtered : array
         Filtered EMG signal.
     onsets : array
         Indices of EMG pulse onsets.
+    processed : array, optional
+        Processed EMG signal according to the chosen onset detector.
     path : str, optional
         If provided, the plot will be saved to the specified file.
     show : bool, optional
@@ -421,9 +433,27 @@ def plot_emg(ts=None,
     fig = plt.figure()
     fig.suptitle('EMG Summary')
 
-    # raw signal
-    ax1 = fig.add_subplot(211)
+    if processed is not None:
+        ax1 = fig.add_subplot(311)
+        ax2 = fig.add_subplot(312, sharex=ax1)
+        ax3 = fig.add_subplot(313)
 
+        # processed signal
+        L = len(processed)
+        T = (L - 1) / sampling_rate
+        ts_processed = np.linspace(0, T, L, endpoint=True)
+        ax3.plot(ts_processed, processed,
+                 linewidth=MAJOR_LW,
+                 label='Processed')
+        ax3.set_xlabel('Time (s)')
+        ax3.set_ylabel('Amplitude')
+        ax3.legend()
+        ax3.grid()
+    else:
+        ax1 = fig.add_subplot(211)
+        ax2 = fig.add_subplot(212, sharex=ax1)
+
+    # raw signal
     ax1.plot(ts, raw, linewidth=MAJOR_LW, label='Raw')
 
     ax1.set_ylabel('Amplitude')
@@ -431,8 +461,6 @@ def plot_emg(ts=None,
     ax1.grid()
 
     # filtered signal with onsets
-    ax2 = fig.add_subplot(212, sharex=ax1)
-
     ymin = np.min(filtered)
     ymax = np.max(filtered)
     alpha = 0.1 * (ymax - ymin)
@@ -829,7 +857,7 @@ def _plot_multichannel(ts=None,
 
     if ylabel is not None:
         # middle left
-        a = nrows / 2
+        a = nrows // 2
         ax = axs[(a, 0)]
         ax.set_ylabel(ylabel)
 
@@ -914,7 +942,7 @@ def plot_ecg(ts=None,
     ax3.plot(heart_rate_ts, heart_rate, linewidth=MAJOR_LW, label='Heart Rate')
 
     ax3.set_xlabel('Time (s)')
-    ax3.set_ylabel('Heart Rate (bmp)')
+    ax3.set_ylabel('Heart Rate (bpm)')
     ax3.legend()
     ax3.grid()
 
@@ -1042,7 +1070,7 @@ def plot_biometrics(assessment=None, eer_idx=None, path=None, show=False):
     id_ax = fig.add_subplot(122)
 
     # subject results
-    for sub in assessment['subject'].keys():
+    for sub in six.iterkeys(assessment['subject']):
         auth_rates = assessment['subject'][sub]['authentication']['rates']
         _ = _plot_rates(ths, auth_rates, ['FAR', 'FRR'],
                         lw=MINOR_LW,
@@ -1134,7 +1162,7 @@ def plot_clustering(data=None, clusters=None, path=None, show=False):
     ymin, ymax = _yscaling(data, alpha=1.2)
 
     # determine number of clusters
-    keys = list(clusters.keys())
+    keys = list(clusters)
     nc = len(keys)
 
     if nc <= 4:

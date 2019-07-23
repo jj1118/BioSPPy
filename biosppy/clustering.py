@@ -1,23 +1,28 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
-    biosppy.clustering
-    ------------------
+biosppy.clustering
+------------------
 
-    This module provides various unsupervised machine learning (clustering)
-    algorithms.
+This module provides various unsupervised machine learning (clustering)
+algorithms.
 
-    :copyright: (c) 2015 by Instituto de Telecomunicacoes
-    :license: BSD 3-clause, see LICENSE for more details.
+:copyright: (c) 2015-2018 by Instituto de Telecomunicacoes
+:license: BSD 3-clause, see LICENSE for more details.
 """
 
 # Imports
+# compat
+from __future__ import absolute_import, division, print_function
+from six.moves import map, range, zip
+import six
+
 # 3rd party
 import numpy as np
 import scipy.cluster.hierarchy as sch
 import scipy.cluster.vq as scv
 import scipy.sparse as sp
 import sklearn.cluster as skc
-from sklearn.grid_search import ParameterGrid
+from sklearn.model_selection import ParameterGrid
 
 # local
 from . import metrics, utils
@@ -134,7 +139,7 @@ def hierarchical(data=None,
                        'ward', 'weighted']:
         raise ValueError("Unknown linkage criterion '%r'." % linkage)
 
-    if not isinstance(metric, str):
+    if not isinstance(metric, six.string_types):
         raise TypeError("Please specify the distance metric as a string.")
 
     N = len(data)
@@ -242,7 +247,7 @@ def consensus(data=None, k=0, linkage='average', fcn=None, grid=None):
         A clustering function.
     grid : dict, list, optional
         A (list of) dictionary with parameters for each run of the clustering
-        method (see sklearn.grid_search.ParameterGrid).
+        method (see sklearn.model_selection.ParameterGrid).
 
     Returns
     -------
@@ -347,7 +352,7 @@ def create_ensemble(data=None, fcn=None, grid=None):
         A clustering function.
     grid : dict, list, optional
         A (list of) dictionary with parameters for each run of the clustering
-        method (see sklearn.grid_search.ParameterGrid).
+        method (see sklearn.model_selection.ParameterGrid).
 
     Returns
     -------
@@ -405,15 +410,15 @@ def create_coassoc(ensemble=None, N=None):
     nparts = len(ensemble)
     assoc = 0
     for part in ensemble:
-        nsamples = np.array([len(part[key]) for key in part.keys()])
-        dim = np.sum(nsamples * (nsamples - 1)) / 2
+        nsamples = np.array([len(part[key]) for key in part])
+        dim = np.sum(nsamples * (nsamples - 1)) // 2
 
         I = np.zeros(dim)
         J = np.zeros(dim)
         X = np.ones(dim)
         ntriplets = 0
 
-        for v in part.values():
+        for v in six.itervalues(part):
             nb = len(v)
             if nb > 0:
                 for h in range(nb):
@@ -539,7 +544,7 @@ def mdist_templates(data=None,
         clusters = {0: np.arange(len(data), dtype='int')}
 
     # cluster labels
-    ks = list(clusters.keys())
+    ks = list(clusters)
 
     # remove the outliers' cluster, if present
     if '-1' in ks:
@@ -631,7 +636,7 @@ def centroid_templates(data=None, clusters=None, ntemplates=1):
         raise TypeError("Please specify a data clustering.")
 
     # cluster labels
-    ks = list(clusters.keys())
+    ks = list(clusters)
 
     # remove the outliers' cluster, if present
     if '-1' in ks:
@@ -987,7 +992,7 @@ def _merge_clusters(clusters):
 
     """
 
-    keys = list(clusters.keys())
+    keys = list(clusters)
 
     # outliers
     if -1 in keys:

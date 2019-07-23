@@ -1,15 +1,20 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
-    biosppy.storage
-    ---------------
+biosppy.storage
+---------------
 
-    This module provides several data storage methods.
+This module provides several data storage methods.
 
-    :copyright: (c) 2015 by Instituto de Telecomunicacoes
-    :license: BSD 3-clause, see LICENSE for more details.
+:copyright: (c) 2015-2018 by Instituto de Telecomunicacoes
+:license: BSD 3-clause, see LICENSE for more details.
 """
 
 # Imports
+# compat
+from __future__ import absolute_import, division, print_function
+from six.moves import range
+import six
+
 # built-in
 import datetime
 import json
@@ -320,7 +325,7 @@ def store_txt(path, data, sampling_rate=1000., resolution=None, date=None,
     if resolution is not None:
         header += "Resolution:= %d\n" % resolution
     if date is not None:
-        if isinstance(date, str):
+        if isinstance(date, six.string_types):
             header += "Date:= %s\n" % date
         elif isinstance(date, datetime.datetime):
             header += "Date:= %s\n" % date.isoformat()
@@ -382,7 +387,7 @@ def load_txt(path):
     # normalize path
     path = utils.normpath(path)
 
-    with open(path, 'r') as fid:
+    with open(path, 'rb') as fid:
         lines = fid.readlines()
 
     # extract header
@@ -390,7 +395,8 @@ def load_txt(path):
     fields = ['Sampling Rate', 'Resolution', 'Date', 'Data Type', 'Labels']
     values = []
     for item in lines:
-        if '#' in item:
+        if b'#' in item:
+            item = item.decode('utf-8')
             # parse comment
             for f in fields:
                 if f in item:
@@ -427,7 +433,7 @@ def load_txt(path):
         pass
 
     # load array
-    data = np.genfromtxt(values, dtype=dtype, delimiter='\t')
+    data = np.genfromtxt(values, dtype=dtype, delimiter=b'\t')
 
     return data, mdata
 
@@ -720,7 +726,7 @@ class HDF(object):
 
         if node.name == '/signals':
             # delete all elements
-            for _, item in node.items():
+            for _, item in six.iteritems(node):
                 try:
                     del self._file[item.name]
                 except IOError:
@@ -742,7 +748,7 @@ class HDF(object):
         group : str, optional
             Signal group.
         recursive : bool, optional
-            It True, also lists signals in sub-groups.
+            If True, also lists signals in sub-groups.
 
         Returns
         -------
@@ -759,7 +765,7 @@ class HDF(object):
             raise KeyError("Inexistent signal group.")
 
         out = []
-        for name, item in node.items():
+        for name, item in six.iteritems(node):
             if isinstance(item, h5py.Dataset):
                 out.append((group, name))
             elif recursive and isinstance(item, h5py.Group):
@@ -972,7 +978,7 @@ class HDF(object):
 
         if node.name == '/events':
             # delete all elements
-            for _, item in node.items():
+            for _, item in six.iteritems(node):
                 try:
                     del self._file[item.name]
                 except IOError:
@@ -994,7 +1000,7 @@ class HDF(object):
         group : str, optional
             Event group.
         recursive : bool, optional
-            It True, also lists events in sub-groups.
+            If True, also lists events in sub-groups.
 
         Returns
         -------
@@ -1011,7 +1017,7 @@ class HDF(object):
             raise KeyError("Inexistent event group.")
 
         out = []
-        for name, item in node.items():
+        for name, item in six.iteritems(node):
             if isinstance(item, h5py.Group):
                 try:
                     _ = item.attrs['json']

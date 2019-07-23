@@ -1,17 +1,21 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
-    biosppy.signals.ecg
-    -------------------
+biosppy.signals.ecg
+-------------------
 
-    This module provides methods to process Electrocardiographic (ECG) signals.
-    Implemented code assumes a single-channel Lead I like ECG signal.
+This module provides methods to process Electrocardiographic (ECG) signals.
+Implemented code assumes a single-channel Lead I like ECG signal.
 
-    :copyright: (c) 2015 by Instituto de Telecomunicacoes
-    :license: BSD 3-clause, see LICENSE for more details.
+:copyright: (c) 2015-2018 by Instituto de Telecomunicacoes
+:license: BSD 3-clause, see LICENSE for more details.
 
 """
 
 # Imports
+# compat
+from __future__ import absolute_import, division, print_function
+from six.moves import range, zip
+
 # 3rd party
 import numpy as np
 import scipy.signal as ss
@@ -74,6 +78,12 @@ def ecg(signal=None, sampling_rate=1000., show=True):
     # segment
     rpeaks, = hamilton_segmenter(signal=filtered, sampling_rate=sampling_rate)
 
+    # correct R-peak locations
+    rpeaks, = correct_rpeaks(signal=filtered,
+                             rpeaks=rpeaks,
+                             sampling_rate=sampling_rate,
+                             tol=0.05)
+
     # extract templates
     templates, rpeaks = extract_heartbeats(signal=filtered,
                                            rpeaks=rpeaks,
@@ -90,7 +100,7 @@ def ecg(signal=None, sampling_rate=1000., show=True):
     # get time vectors
     length = len(signal)
     T = (length - 1) / sampling_rate
-    ts = np.linspace(0, T, length, endpoint=False)
+    ts = np.linspace(0, T, length, endpoint=True)
     ts_hr = ts[hr_idx]
     ts_tmpl = np.linspace(-0.2, 0.4, templates.shape[1], endpoint=False)
 
@@ -280,6 +290,8 @@ def compare_segmentation(reference=None, test=None, sampling_rate=1000.,
     if minRR is None:
         minRR = np.inf
 
+    sampling_rate = float(sampling_rate)
+
     # ensure numpy
     reference = np.array(reference)
     test = np.array(test)
@@ -380,6 +392,57 @@ def compare_segmentation(reference=None, test=None, sampling_rate=1000.,
              'mean_test_ibi', 'std_test_ibi',)
 
     return utils.ReturnTuple(args, names)
+
+
+def correct_rpeaks(signal=None, rpeaks=None, sampling_rate=1000., tol=0.05):
+    """Correct R-peak locations to the maximum within a tolerance.
+
+    Parameters
+    ----------
+    signal : array
+        ECG signal.
+    rpeaks : array
+        R-peak location indices.
+    sampling_rate : int, float, optional
+        Sampling frequency (Hz).
+    tol : int, float, optional
+        Correction tolerance (seconds).
+
+    Returns
+    -------
+    rpeaks : array
+        Cerrected R-peak location indices.
+
+    Notes
+    -----
+    * The tolerance is defined as the time interval :math:`[R-tol, R+tol[`.
+
+    """
+
+    # check inputs
+    if signal is None:
+        raise TypeError("Please specify an input signal.")
+
+    if rpeaks is None:
+        raise TypeError("Please specify the input R-peaks.")
+
+    tol = int(tol * sampling_rate)
+    length = len(signal)
+
+    newR = []
+    for r in rpeaks:
+        a = r - tol
+        if a < 0:
+            continue
+        b = r + tol
+        if b > length:
+            break
+        newR.append(a + np.argmax(signal[a:b]))
+
+    newR = sorted(list(set(newR)))
+    newR = np.array(newR, dtype='int')
+
+    return utils.ReturnTuple((newR,), ('rpeaks',))
 
 
 def ssf_segmenter(signal=None, sampling_rate=1000., threshold=20, before=0.03,
@@ -497,7 +560,7 @@ def christov_segmenter(signal=None, sampling_rate=1000.):
     X = ss.filtfilt(b, a, signal)
     # 2. Moving averaging of samples in 28 ms interval for electromyogram
     # noise suppression a filter with first zero at about 35 Hz.
-    b = np.ones(sampling_rate / 35.) / 35.
+    b = np.ones(int(sampling_rate / 35.)) / 35.
     X = ss.filtfilt(b, a, X)
     X, _, _ = st.filter_signal(signal=X,
                                ftype='butter',
@@ -525,11 +588,11 @@ def christov_segmenter(signal=None, sampling_rate=1000.):
     # with first zero at about 25 Hz. It is suppressing the noise
     # magnified by the differentiation procedure used in the
     # process of the complex lead sintesis.
-    b = np.ones(sampling_rate / 25.) / 25.
+    b = np.ones(int(sampling_rate / 25.)) / 25.
     Y = ss.lfilter(b, a, Y)
 
     # Init
-    MM = M_th * np.max(Y[:5 * sampling_rate]) * np.ones(5)
+    MM = M_th * np.max(Y[:int(5 * sampling_rate)]) * np.ones(5)
     MMidx = 0
     M = np.mean(MM)
     slope = np.linspace(1.0, 0.6, int(sampling_rate))
@@ -821,8 +884,9 @@ def gamboa_segmenter(signal=None, sampling_rate=1000., tol=0.002):
         for i in b[1:]:
             if i - previous > v_300ms:
                 previous = i
-                rpeaks.append(np.argmax(signal[i:i + v_100ms]) + i)
+                rpeaks.append(np.argmax(signal[int(i):int(i + v_100ms)]) + i)
 
+    rpeaks = sorted(list(set(rpeaks)))
     rpeaks = np.array(rpeaks, dtype='int')
 
     return utils.ReturnTuple((rpeaks,), ('rpeaks',))
@@ -1052,7 +1116,6 @@ def hamilton_segmenter(signal=None, sampling_rate=1000.):
 
     beats = np.array(beats)
 
-    lim = lim
     r_beats = []
     thres_ch = 0.85
     adjacency = 0.05 * sampling_rate
@@ -1080,11 +1143,11 @@ def hamilton_segmenter(signal=None, sampling_rate=1000.):
         try:
             twopeaks = [pospeaks[0]]
         except IndexError:
-            pass
+            twopeaks = []
         try:
             twonegpeaks = [negpeaks[0]]
         except IndexError:
-            pass
+            twonegpeaks = []
 
         # getting positive peaks
         for i in range(len(pospeaks) - 1):
@@ -1107,26 +1170,30 @@ def hamilton_segmenter(signal=None, sampling_rate=1000.):
             error[1] = True
 
         # choosing type of R-peak
-        if not sum(error):
-            if posdiv > thres_ch * negdiv:
-                # pos noerr
+        n_errors = sum(error)
+        try:
+            if not n_errors:
+                if posdiv > thres_ch * negdiv:
+                    # pos noerr
+                    r_beats.append(twopeaks[0][1] + add)
+                else:
+                    # neg noerr
+                    r_beats.append(twonegpeaks[0][1] + add)
+            elif n_errors == 2:
+                if abs(twopeaks[0][1]) > abs(twonegpeaks[0][1]):
+                    # pos allerr
+                    r_beats.append(twopeaks[0][1] + add)
+                else:
+                    # neg allerr
+                    r_beats.append(twonegpeaks[0][1] + add)
+            elif error[0]:
+                # pos poserr
                 r_beats.append(twopeaks[0][1] + add)
             else:
-                # neg noerr
+                # neg negerr
                 r_beats.append(twonegpeaks[0][1] + add)
-        elif sum(error) == 2:
-            if abs(twopeaks[0][1]) > abs(twonegpeaks[0][1]):
-                # pos allerr
-                r_beats.append(twopeaks[0][1] + add)
-            else:
-                # neg allerr
-                r_beats.append(twonegpeaks[0][1] + add)
-        elif error[0]:
-            # pos poserr
-            r_beats.append(twopeaks[0][1] + add)
-        else:
-            # neg negerr
-            r_beats.append(twonegpeaks[0][1] + add)
+        except IndexError:
+            continue
 
     rpeaks = sorted(list(set(r_beats)))
     rpeaks = np.array(rpeaks, dtype='int')

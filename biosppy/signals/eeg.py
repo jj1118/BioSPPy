@@ -1,16 +1,20 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """
-    biosppy.signals.eeg
-    -------------------
+biosppy.signals.eeg
+-------------------
 
-    This module provides methods to process Electroencephalographic (EEG)
-    signals.
+This module provides methods to process Electroencephalographic (EEG)
+signals.
 
-    :copyright: (c) 2015 by Instituto de Telecomunicacoes
-    :license: BSD 3-clause, see LICENSE for more details.
+:copyright: (c) 2015-2018 by Instituto de Telecomunicacoes
+:license: BSD 3-clause, see LICENSE for more details.
 """
 
 # Imports
+# compat
+from __future__ import absolute_import, division, print_function
+from six.moves import range
+
 # 3rd party
 import numpy as np
 
@@ -120,7 +124,7 @@ def eeg(signal=None, sampling_rate=1000., labels=None, show=True):
     # get time vectors
     length = len(signal)
     T = (length - 1) / sampling_rate
-    ts = np.linspace(0, T, length, endpoint=False)
+    ts = np.linspace(0, T, length, endpoint=True)
 
     # plot
     if show:
